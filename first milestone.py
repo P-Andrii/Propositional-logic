@@ -64,7 +64,13 @@ class WFF:
         # A list for future use in the calculate function where the WFF will take a series of constants/wffs as it's input
         # Is also used when using the function as a rule of inference to store the variables
         self.variable_list = {}
+        self.variable_list_tag = {}
         for i in set(self.extract_inputs(self.formula)):
+            self.variable_list[i] = i
+            self.variable_list_tag[i] = False
+
+    def reset_variable_list(self):
+        for i in self.variable_list.keys():
             self.variable_list[i] = i
 
     def calculate_node(self, variable_list=None, node=None):
@@ -102,8 +108,7 @@ class WFF:
             temp_2 = self.variable_list[temp_2].value
 
         # reset the variable list just in case
-        for i in self.variable_list.keys():
-            self.variable_list[i] = i
+        self.reset_variable_list()
 
         # In the connective_dictionary find the function corresponding to the string in the middle of the formula
         return connective_dictionary[node[1]]([temp_1, temp_2])
@@ -146,16 +151,14 @@ class WFF:
 
         # after every input WFF have found their place within the rule of inference WFF we check if all variables have found
         # a constant to be replaced with
-        temp_outcome_tag = True
-        for i in self.variable_list.keys():
-            if self.variable_list[i] == i:
-                temp_outcome_tag = False
-        if temp_outcome_tag:
-            return self.inference_result(self.formula[2])
-        else:
-            for i in self.variable_list.keys():
-                self.variable_list[i] = i
+
+        if False in self.variable_list_tag.values():
+            self.reset_variable_list()
             return False
+        else:
+            temp = self.inference_result(self.formula[2])
+            self.reset_variable_list()
+            return temp
 
     def inference_recursive(self, node, input_wff):
         # this is the recursive function that tries to find the position of the "node" that can be replaced with the input wff
@@ -187,25 +190,26 @@ class WFF:
             if debug: print(f"{input_wff} fits {node}")
 
             # same kind of node sub formula checking as in the calculate function
-            # this part is currently being my headache because it currently cannot be used to create new inference rules
-            # e.g. it can only be used to create clauses like "Rain leads to wet" but cannot be used in a more general sense yet.
-            # I think all I need to implement that will be to know which variables have already been replaced, but we'll see
-
+            # e.g. check on the left and right side if they are variables/constants/sub-formulas and then act accordingly
+            
+            # check if it's a variable
             if isinstance(node[0], int):
-                if isinstance(self.variable_list[node[0]], int) or self.variable_list[node[0]] == input_wff[0] :
-                    # check if the variable have already been replaced, which would be indicated by changes in the variable list
-                    # (this is the exact part I was talking about a few lines above)
+                if self.variable_list_tag[node[0]] is False or self.variable_list[node[0]] == input_wff[0]:
+                    # check if the variable have already been replaced, which would be indicated by changes in the variable list tags
                     # and if so, check if it has been replaced with a variable that it's about to be replaced with
                     node1_flag = True
                 else:
                     node1_flag = False
-
+            
+            # check if it's a constant
             elif isinstance(node[0], Const):
                 # if the left side is a constant check if it's trying to be replaced by the same constant
                 if node[0] == input_wff[0]:
                     node1_flag = True
                 else:
                     node1_flag = False
+            
+            # check if it's a sub-formula
             elif isinstance(node[0], list):
                 # if the left side is a list then recursively apply this function to it and the left side of the input wff
                 if isinstance(input_wff[0], list):
@@ -215,7 +219,7 @@ class WFF:
 
             # below is the copy of the code above for the right hand side
             if isinstance(node[2], int):
-                if self.variable_list[node[2]] == input_wff[2] or isinstance(self.variable_list[node[2]], int):
+                if self.variable_list_tag[node[2]] is False or self.variable_list[node[2]] == input_wff[2]:
                     node2_flag = True
                 else:
                     node2_flag = False
@@ -240,10 +244,12 @@ class WFF:
         # that either being a constant, a variable (W.I.P.), or a sub formula
         if isinstance(node[0], int):
             self.variable_list[node[0]] = input_wff[0]
+            self.variable_list_tag[node[0]] = True
         elif isinstance(node[0], list):
             self.inference_substitution(node[0], input_wff[0])
         if isinstance(node[2], int):
             self.variable_list[node[2]] = input_wff[2]
+            self.variable_list_tag[node[2]] = True
         elif isinstance(node[2], list):
             self.inference_substitution(node[2], input_wff[2])
 
@@ -295,11 +301,10 @@ def main():
     wff_4 = WFF(domain_1, [0, "and", 1])
     print(wff_4.calculate_node([a,b]))
 
-    # rule of inference with a more general use, where I'm trying to replace variables with new variables
-    # but it's currently 2am and I'm too dead to make it real
-    #wff_5 = WFF(domain_1, [0, "=>", 1])
-    #wff_6 = WFF(domain_1, [1, "=>", 2])
-    #print(wff_1.inference_apply(wff_5, wff_6))
+    # rule of inference with a more general use, where instead of constants the input wff have variables
+    wff_5 = WFF(domain_1, [0, "=>", 1])
+    wff_6 = WFF(domain_1, [1, "=>", 2])
+    print(wff_1.inference_apply(wff_5, wff_6))
 
 if __name__ == "__main__":
     main()
