@@ -50,6 +50,9 @@ class WFF:
     # As mentioned above a WFF is a mathematical way of writing logical clauses
     # "If it's raining then the ground is wet" can be written as (R => W)
     # where R is "It's Raining", W is "The ground is wet" and "=>" is the logical connective for "if, then"
+    # The full list of logical connectives is provided at the top of the file
+    # The convention to declare a formula for a WFF in this code is [R, "=>", W]
+    # For more complicated logical clauses like "If R or D Then W", e.g. "(R or D) => W", we use [[R, "or", D], =>, W]
     def __init__(self, domain: Domain, formula):
         debug = True  # a boolean that can be turned on for debug printout
         # WFF's formula and domain in which it can be used
