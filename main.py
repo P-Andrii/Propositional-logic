@@ -33,14 +33,22 @@ class Const:
     # Constant class - used to store data for constant objects and is a target of WFF and quantifiers
     # E.G. "Human" would be a constant, "Is an animal" would be a quantifier, "Is an animal therefore Is alive" would be a WFF
     # currently mostly unused although the rest of the code is written with its existence in mind
-    def __init__(self, name, domain: Domain, value=None):
+    def __init__(self, name, domain: Domain, data:dict=None):
         if name is None:
             exit("Constant cannot be undefined")
         self.name = name
-        self.value = value
+        if data is None:self.data = {}
+        else: self.data = data
         self.domain = domain
 
         self.domain.domain_of_interpretation.append(self)
+
+    def value(self):
+        if "binary_value" in self.data.keys():
+            return self.data["binary_value"]
+        else:
+            print(f"{self.name} does not have a binary value")
+            return None
 
     def __repr__(self):
         return self.name
@@ -50,9 +58,6 @@ class WFF:
     # As mentioned above a WFF is a mathematical way of writing logical clauses
     # "If it's raining then the ground is wet" can be written as (R => W)
     # where R is "It's Raining", W is "The ground is wet" and "=>" is the logical connective for "if, then"
-    # The full list of logical connectives is provided at the top of the file
-    # The convention to declare a formula for a WFF in this code is [R, "=>", W]
-    # For more complicated logical clauses like "If R or D Then W", e.g. "(R or D) => W", we use [[R, "or", D], =>, W]
     def __init__(self, domain: Domain, formula):
         debug = True  # a boolean that can be turned on for debug printout
         # WFF's formula and domain in which it can be used
@@ -76,7 +81,7 @@ class WFF:
         for i in self.variable_list.keys():
             self.variable_list[i] = i
 
-    def calculate_node(self, variable_list=None, node=None):
+    def calculate_node(self, variable_list:list[Const]=None, node=None):
         # The recursive function called for calculating the value of a WFF for a certain list of constants
         # To make it recursive but to avoid making separate functions the function takes 2 optional arguments:
         # Variable list for the first calling of this function which gets saved to the WFF for optimisation
@@ -85,9 +90,8 @@ class WFF:
         debug = True  # a boolean that can be turned on for debug printout
         if node is None:
             node = self.formula
-        if variable_list:
-            for _, i in enumerate(variable_list):
-                self.variable_list[_] = i
+        for _, i in enumerate(self.variable_list.keys()):
+            self.variable_list[i] = variable_list[_]
         if debug: print(self.variable_list)
 
         # Temporary variables for the left and right parts of the formula
@@ -98,18 +102,17 @@ class WFF:
         # Could've turned this part into a separate function but that feels excessive for just 2 uses
         if isinstance(temp_1, list):
             temp_1 = self.calculate_node(node=temp_1) # if it's a list recursively run this function
-        elif isinstance(temp_1, Const):
-            temp_1 = temp_1.value # if it's a constant check it's value
         elif isinstance(temp_1, int):
-            temp_1 = self.variable_list[temp_1].value # if it's a variable check the variable_list for the corresponding constant
+            temp_1 = self.variable_list[temp_1].value() # if it's a variable check the variable_list for the corresponding constant
+        else:
+            temp_1.value()
 
         if isinstance(temp_2, list):
             temp_2 = self.calculate_node(node=temp_2)
-        elif isinstance(temp_2, Const):
-            temp_2 = temp_2.value
         elif isinstance(temp_2, int):
-            temp_2 = self.variable_list[temp_2].value
-
+            temp_2 = self.variable_list[temp_2].value()
+        else:
+            temp_2.value()
         # reset the variable list just in case
         self.reset_variable_list()
 
@@ -138,7 +141,7 @@ class WFF:
     def inference_apply(self, *args):
         # the function to be called from outside to apply the WFF as an inference rule to the WFF that are passed as *arguments
         # *args is used instead of regular arguments because this allows for infinite number of input WFF
-        debug = True # a boolean that can be turned on for debug printout
+        debug = False # a boolean that can be turned on for debug printout
         if self.inference_rule_tag is False:
             return None
 
@@ -194,7 +197,7 @@ class WFF:
 
             # same kind of node sub formula checking as in the calculate function
             # e.g. check on the left and right side if they are variables/constants/sub-formulas and then act accordingly
-            
+
             # check if it's a variable
             if isinstance(node[0], int):
                 if self.variable_list_tag[node[0]] is False or self.variable_list[node[0]] == input_wff[0]:
@@ -203,20 +206,20 @@ class WFF:
                     node1_flag = True
                 else:
                     node1_flag = False
-            
-            # check if it's a constant
-            elif isinstance(node[0], Const):
-                # if the left side is a constant check if it's trying to be replaced by the same constant
-                if node[0] == input_wff[0]:
-                    node1_flag = True
-                else:
-                    node1_flag = False
-            
+
             # check if it's a sub-formula
             elif isinstance(node[0], list):
                 # if the left side is a list then recursively apply this function to it and the left side of the input wff
                 if isinstance(input_wff[0], list):
                     node1_flag = self.inference_check_node(node[0], input_wff[0])
+                else:
+                    node1_flag = False
+
+            # check if it's a constant/something else
+            else:
+                # if so, check if it's trying to be replaced by the same constant/etc.
+                if node[0] == input_wff[0]:
+                    node1_flag = True
                 else:
                     node1_flag = False
 
@@ -226,25 +229,27 @@ class WFF:
                     node2_flag = True
                 else:
                     node2_flag = False
-            elif isinstance(node[2], Const):
-                if node[2] == input_wff[2]:
-                    node2_flag = True
-                else:
-                    node2_flag = False
+
             elif isinstance(node[2], list):
                 if isinstance(input_wff[2], list):
                     node2_flag = self.inference_check_node(node[2], input_wff[2])
                 else:
                     node2_flag = False
 
-        # if both sides can be replaced by the sides of the input wff and it has the same operation then it returns true
+            else:
+                if node[2] == input_wff[2]:
+                    node2_flag = True
+                else:
+                    node2_flag = False
+
+        # if both sides can be replaced by the sides of the input wff, and it has the same operation then it returns true
         if node1_flag and node2_flag: return True
         else: return False
 
     def inference_substitution(self, node, input_wff):
         # this is the function for when the correct position for the input wff has been found within the rule of inference WFF
         # this function scans the correct node for variables and replaces them with respective parts of the input wff
-        # that either being a constant, a variable (W.I.P.), or a sub formula
+        # that either being a constant, a variable, or a sub formula
         if isinstance(node[0], int):
             self.variable_list[node[0]] = input_wff[0]
             self.variable_list_tag[node[0]] = True
@@ -264,17 +269,17 @@ class WFF:
         temp = ["left", output_wff[1], "right"]
         if isinstance(output_wff[0], int):
             temp[0] = self.variable_list[output_wff[0]]
-        elif isinstance(output_wff[0], Const):
-            temp[0] = output_wff[0]
         elif isinstance(output_wff[0], list):
             temp[0] = self.inference_result(output_wff[0])
+        else:
+            temp[0] = output_wff[0]
 
         if isinstance(output_wff[2], int):
             temp[2] = self.variable_list[output_wff[2]]
-        elif isinstance(output_wff[2], Const):
-            temp[2] = output_wff[2]
         elif isinstance(output_wff[2], list):
             temp[2] = self.inference_result(output_wff[2])
+        else:
+            temp[2] = output_wff[2]
 
         return temp
 
@@ -288,8 +293,8 @@ def main():
     domain_1 = Domain() # creating an empty domain
 
     # a and b are constants used in the calculation example, they can also be used in the rule of inference example
-    a = Const("a", domain_1, True)
-    b = Const("b", domain_1, True)
+    a = Const("a", domain_1, {"binary_value":True})
+    b = Const("b", domain_1, {"binary_value":True})
 
     # wff_1 is the WFF that will be used as an example of a rule of inference
     # wff_2 and wff_3 will be used as examples of possible WFF that are subject to a rule of inference
