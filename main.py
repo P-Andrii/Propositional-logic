@@ -1,25 +1,32 @@
 # basic operations and the dictionary for summoning them
 # effectively is just custom syntax code because it's easier to type op_if() that it is to configure an entire if statement
 
+
 def op_not(temp_input):
-    return not temp_input[0]
+    return not temp_input[1].value()
 
 def op_or(temp_input):
-    return temp_input[0] or temp_input[1]
+    return temp_input[0].value() or temp_input[1].value()
 
 def op_and(temp_input):
-    return temp_input[0] and temp_input[1]
+    return temp_input[0].value() and temp_input[1].value()
 
 def op_if(temp_input):
-    if temp_input[0] is True and temp_input[1] is False:
+    if temp_input[0].value() is True and temp_input[1].value() is False:
         return False
     else:
         return True
 
 def op_only_if(temp_input):
-    return (temp_input[0] and temp_input[1]) or not (temp_input[0] and temp_input[1])
+    return (temp_input[0].value() and temp_input[1].value()) or not (temp_input[0].value() and temp_input[1].value())
 
-connective_dictionary = {"-": op_not, "or":op_or, "and":op_and, "=>":op_if, "<=>":op_only_if}
+def qualifier(temp_input):
+    if temp_input[0] in temp_input[1].data.keys():
+        return temp_input[1].data[temp_input[0]]
+    else:
+        return False
+
+connective_dictionary = {"-": op_not, "or":op_or, "and":op_and, "=>":op_if, "<=>":op_only_if, "qua":qualifier}
 
 class Domain:
     # The domain class - used as storage of WFF, constants, axioms and rules of inference
@@ -33,13 +40,17 @@ class Const:
     # Constant class - used to store data for constant objects and is a target of WFF and quantifiers
     # E.G. "Human" would be a constant, "Is an animal" would be a quantifier, "Is an animal therefore Is alive" would be a WFF
     # currently mostly unused although the rest of the code is written with its existence in mind
-    def __init__(self, name, domain: Domain, data:dict=None):
+    def __init__(self, name, domain: Domain, data:dict=None, sets:list=None):
         if name is None:
             exit("Constant cannot be undefined")
         self.name = name
+        self.domain = domain
+
+        if sets is None:self.sets = []
+        else: self.sets = sets
+
         if data is None:self.data = {}
         else: self.data = data
-        self.domain = domain
 
         self.domain.domain_of_interpretation.append(self)
 
@@ -53,13 +64,29 @@ class Const:
     def __repr__(self):
         return self.name
 
+class Set:
+    def __int__(self, domain:Domain, set_list:list[Const]=None, data:dict=None):
+        self.domain = Domain
+
+        if set_list is None:self.list = []
+        else:
+            self.list = set_list
+            for i in self.list:
+                i.sets.append(self)
+
+        if data is None:self.data = []
+        else:self.data = data
+
+    def add_constant(self, const_:Const):
+        self.list.append(const_)
+        const_.sets.append(self)
+
 class WFF:
     # The pièce de résistance of the code, WFF - Well Formed Formula, sometimes written simply as WF, but we burn people who do that as heretics
     # As mentioned above a WFF is a mathematical way of writing logical clauses
     # "If it's raining then the ground is wet" can be written as (R => W)
     # where R is "It's Raining", W is "The ground is wet" and "=>" is the logical connective for "if, then"
     def __init__(self, domain: Domain, formula):
-        debug = True  # a boolean that can be turned on for debug printout
         # WFF's formula and domain in which it can be used
         self.domain = domain
         self.formula = formula
@@ -87,12 +114,12 @@ class WFF:
         # Variable list for the first calling of this function which gets saved to the WFF for optimisation
         # And Node used when calling the function recursively to know which sub-part of the formula is being calculated
 
-        debug = True  # a boolean that can be turned on for debug printout
+        debug = False  # a boolean that can be turned on for debug printout
         if node is None:
             node = self.formula
         for _, i in enumerate(self.variable_list.keys()):
-            self.variable_list[i] = variable_list[_]
-        if debug: print(self.variable_list)
+            self.variable_list[i] = variable_list[_] # here PyCharm IDE gives a warning, but it's just a bug
+        if debug: print(f"variable list: {self.variable_list}")
 
         # Temporary variables for the left and right parts of the formula
         temp_1 = node[0]
@@ -103,16 +130,12 @@ class WFF:
         if isinstance(temp_1, list):
             temp_1 = self.calculate_node(node=temp_1) # if it's a list recursively run this function
         elif isinstance(temp_1, int):
-            temp_1 = self.variable_list[temp_1].value() # if it's a variable check the variable_list for the corresponding constant
-        else:
-            temp_1.value()
+            temp_1 = self.variable_list[temp_1] # if it's a variable check the variable_list for the corresponding constant
 
         if isinstance(temp_2, list):
             temp_2 = self.calculate_node(node=temp_2)
         elif isinstance(temp_2, int):
-            temp_2 = self.variable_list[temp_2].value()
-        else:
-            temp_2.value()
+            temp_2 = self.variable_list[temp_2]
         # reset the variable list just in case
         self.reset_variable_list()
 
@@ -187,8 +210,6 @@ class WFF:
 
         # a part of flag that indicate whether the left and right parts of the node can be replaced with the
         # left and right parts of the input wff respectively
-        node1_flag = False
-        node2_flag = False
 
         if node[1] != input_wff[1]: # check if the node and input wff have the same operation type
             return False
@@ -294,7 +315,7 @@ def main():
 
     # a and b are constants used in the calculation example, they can also be used in the rule of inference example
     a = Const("a", domain_1, {"binary_value":True})
-    b = Const("b", domain_1, {"binary_value":True})
+    b = Const("b", domain_1, {"binary_value":False})
 
     # wff_1 is the WFF that will be used as an example of a rule of inference
     # wff_2 and wff_3 will be used as examples of possible WFF that are subject to a rule of inference
@@ -313,6 +334,11 @@ def main():
     wff_5 = WFF(domain_1, [0, "=>", 1])
     wff_6 = WFF(domain_1, [1, "=>", 2])
     print(wff_1.inference_apply(wff_5, wff_6))
+
+    # qualifier test
+    c = Const("human", domain_1, {"alive":True})
+    wff_7 = WFF(domain_1, ["alive", "qua", c])
+    print(wff_7.calculate_node())
 
 if __name__ == "__main__":
     main()
